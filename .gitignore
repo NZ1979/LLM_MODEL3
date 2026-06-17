@@ -1,0 +1,43 @@
+# Secrets
+.env
+*.key
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.ipynb_checkpoints/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Data artifacts (raw + derived) — never commit large/vendor data
+data/raw/
+data/processed/
+data/cache/
+*.parquet
+*.feather
+*.h5
+*.db
+*.sqlite
+*.csv
+*.zip
+
+# Model artifacts
+models/artifacts/
+*.pkl
+*.joblib
+*.onnx
+
+# Notebook + research output
+research/output/
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

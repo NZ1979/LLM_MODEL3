@@ -1,0 +1,27 @@
+# LLM_Model3 dependencies. Pin versions in P1 once the data lake is built and an env is locked.
+# This is the P0 starting set; treat as a floor, not a frozen lockfile.
+
+# Core numerics / data
+numpy
+pandas
+scipy
+pyarrow            # parquet for the PIT data lake
+
+# Modeling (Engine B; added for real in P3/P4)
+scikit-learn
+lightgbm           # gradient-boosted ranker baseline
+
+# Validation / stats
+statsmodels
+
+# Data access
+requests           # Polygon REST
+python-dotenv      # load .env into environment
+
+# Tooling
+pytest
+ruff
+
+# Research
+jupyterlab
+matplotlib
