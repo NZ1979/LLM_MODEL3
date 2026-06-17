@@ -14,7 +14,7 @@ venv/
 .mypy_cache/
 .ruff_cache/
 
-# Data artifacts (raw + derived) — never commit large/vendor data
+# Data artifacts (raw + derived) - never commit large/vendor data
 data/raw/
 data/processed/
 data/cache/

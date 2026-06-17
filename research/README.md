@@ -1,4 +1,4 @@
-# research/ — exploration and experiment logs
+# research/ - exploration and experiment logs
 
 Notebooks, scratch analysis, and dated experiment notes. Nothing here is load-bearing for production; promote anything that becomes real into `features/`, `models/`, or `validation/`.
 

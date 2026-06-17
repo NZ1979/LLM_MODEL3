@@ -1,0 +1,3 @@
+# Normalize line endings: store LF in the repo, check out native per OS.
+# Stops the "LF will be replaced by CRLF" warnings on git add.
+* text=auto

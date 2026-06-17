@@ -1,4 +1,4 @@
-# validation/ — the leak-prevention core
+# validation/ - the leak-prevention core
 
 The harness that decides whether anything ships. Built before any strategy logic is trusted. If this is wrong, every downstream result is fiction, so this folder carries the most scrutiny in the repo.
 

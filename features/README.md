@@ -1,4 +1,4 @@
-# features/ — feature engineering
+# features/ - feature engineering
 
 Transforms PIT data into model inputs. Every feature is stamped with the time it was knowable; nothing here may peek forward.
 
