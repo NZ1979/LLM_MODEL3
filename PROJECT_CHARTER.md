@@ -77,6 +77,12 @@ The pre-committed thresholds live in `KILL_RULE.md` and were **locked by the ope
 - **P4:** add LLM features to B, measure marginal IC, apply the kill rule.
 - **P5:** combine engines, cost/capacity model, paper trade, then small real money.
 
-## 8. Data source
+## 8. Data sources
 
-ETF price history: **Polygon** (split/dividend-adjusted daily bars, 15-20yr history), locked 2026-06-17. Key availability to LLM_Model3 to be confirmed on Godzilla before P1. Secrets via environment variables only; see `.env.example`.
+**Engine A ETF EOD history: Tiingo** (decided 2026-06-17). 30+ years of corporate-action-adjusted daily bars for stocks/ETFs. Chosen over Polygon because Polygon's subscribed plan caps history at 5 years (verified by probe 2026-06-17: SPY returned only 2021-06-18 onward, 1255 bars), which is too short to validate a trend system across multiple regimes. Tiingo's free tier covers EOD history for research; revisit licensing/limits before any live use (charter: no real money until kill rule + paper).
+
+**Polygon: retained** for what its plan is good at (recent/intraday data if ever needed). Key already in `.env`. Not used for Engine A deep history.
+
+**Engine B survivorship-free equity panel: deferred to P3.** When the panel is built, evaluate **Norgate Data** (Platinum, survivorship-free delisted history back to 1990, Windows-native) - the only surveyed source that solves delisting/survivorship cleanly. Not purchased now to avoid front-loading cost before Engine A proves the harness (Rule 7).
+
+Secrets via environment variables only; see `.env.example`.

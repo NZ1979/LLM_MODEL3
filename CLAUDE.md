@@ -51,3 +51,4 @@ Environment variables only - never in tracked files. `.env` is gitignored; `.env
 - Times in any schedule/config are America/Denver unless stated; handle DST.
 - Python: use the repo `.venv`. Dependencies in `requirements.txt`.
 - Build sequence is P0→P5 (see `PROJECT_CHARTER.md` §7). Don't build strategy logic ahead of the sequence.
+- **Engine A focus (operator directive 2026-06-17):** do not build or discuss Engine B (cross-sectional ML, equity panel, Norgate, LLM features) until Engine A is built, run, and adjudicated by the kill rule. Keep all attention on Engine A until then.

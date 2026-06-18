@@ -4,8 +4,8 @@ Holds all market data, stored so every value is stamped with the time it was **k
 
 ## Contents (built in P1)
 
-- **ETF daily history** (easy): split/dividend-adjusted daily bars for the ~22-ETF Engine A universe from Polygon. 15-20+ years.
-- **Survivorship-corrected equity panel** (hard, leak-prone - deferred): the Engine B universe including delisted/acquired names, with as-reported (not restated) fundamentals and publish-time stamps.
+- **ETF daily history** (easy): corporate-action-adjusted daily bars for the ~22-ETF Engine A universe from **Tiingo** (30+ yr). Polygon's plan caps at 5 yr, so Tiingo is the deep-history source for Engine A; see charter §8.
+- **Survivorship-corrected equity panel** (hard, leak-prone - deferred to P3): the Engine B universe including delisted/acquired names, with as-reported (not restated) fundamentals and publish-time stamps. Source TBD at P3 (Norgate Data is the leading candidate; see charter §8).
 
 ## Rules
 
