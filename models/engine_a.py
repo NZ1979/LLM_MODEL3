@@ -14,7 +14,8 @@ against KILL_RULE.md. No goalpost moves: if it misses, it misses.
 
 Signal (per ETF, causal): mean of sign(total return) over 3/6/12 months.
 Sizing: inverse-vol within class; equal risk budget across classes; then a
-portfolio vol-targeting overlay to ~15% annual (ex-ante proxy, causal), lev cap 2.5x.
+portfolio vol-targeting overlay to ~15% annual driven by the strategy's own
+trailing realized vol (captures correlation), causal, lev cap 2.5x.
 Leakage guards: all inputs use data <= day t; final weights lagged one day.
 
 Usage, in the Godzilla .venv (PowerShell), from C:\\trading\\LLM_MODEL3:
@@ -65,15 +66,18 @@ def build_weights(adj_close: pd.DataFrame, lag: int = 1) -> tuple:
         # class contributes 1/K of the (corr-ignoring) marginal-vol budget
         w_raw[cols] = inv[cols].div(denom, axis=0).fillna(0.0) / K
 
-    # portfolio vol-targeting overlay (ex-ante proxy, ignores cross-correlation)
-    vol_proxy = np.sqrt(((w_raw * vol) ** 2).sum(axis=1)).replace(0, np.nan)
-    lev = (TARGET_PORT_VOL / vol_proxy).clip(upper=LEV_CAP).fillna(0.0)
-    w_scaled = w_raw.mul(lev, axis=0)
+    # weekly rebalance the risk-parity weights, then lag (causal)
+    weekly = w_raw.resample(REBALANCE).last()
+    w_base = weekly.reindex(w_raw.index, method="ffill").fillna(0.0).shift(lag).fillna(0.0)
 
-    # weekly rebalance, then lag (causal)
-    weekly = w_scaled.resample(REBALANCE).last()
-    w = weekly.reindex(w_scaled.index, method="ffill").fillna(0.0)
-    w = w.shift(lag).fillna(0.0)
+    # portfolio vol-targeting overlay from the strategy's OWN trailing realized vol,
+    # which captures cross-asset correlation (unlike a per-asset proxy). Causal:
+    # leverage uses only past strategy vol (shifted one day).
+    unscaled_ret = (w_base * rets).sum(axis=1)
+    realized_vol = unscaled_ret.rolling(VOL_WINDOW).std() * np.sqrt(backtest.TRADING_DAYS)
+    lev = (TARGET_PORT_VOL / realized_vol.replace(0, np.nan)).clip(upper=LEV_CAP)
+    lev = lev.shift(1).fillna(0.0)
+    w = w_base.mul(lev, axis=0).fillna(0.0)
     return w, rets
 
 
