@@ -38,6 +38,20 @@ UNIVERSE_BY_CLASS = {
 
 ETF_UNIVERSE = list(UNIVERSE_BY_CLASS.keys())
 
+# Macro classes for risk-parity budgeting (Engine A). Coarser than the fine tags
+# above: each macro class gets an equal risk budget so 14 correlated equity ETFs
+# do not stack as 14 independent bets. Fixed a priori (do not tune to results).
+MACRO_CLASS = {
+    "SPY": "equity", "XLK": "equity", "XLF": "equity", "XLE": "equity", "XLV": "equity",
+    "XLI": "equity", "XLY": "equity", "XLP": "equity", "XLU": "equity", "XLB": "equity",
+    "XLRE": "equity", "EFA": "equity", "EEM": "equity", "VNQ": "equity",
+    "TLT": "fixed_income", "IEF": "fixed_income", "LQD": "fixed_income",
+    "HYG": "fixed_income", "SHY": "fixed_income",
+    "DBC": "commodities", "USO": "commodities",
+    "GLD": "gold",
+}
+assert set(MACRO_CLASS) == set(UNIVERSE_BY_CLASS), "MACRO_CLASS must cover the universe"
+
 # Earliest date we attempt to pull; vendor returns from each ETF's inception onward.
 HISTORY_START = "2000-01-01"
 
