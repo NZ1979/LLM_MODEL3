@@ -42,9 +42,24 @@ TARGET_PORT_VOL = 0.15       # annual portfolio vol target
 LEV_CAP = 2.5
 REBALANCE = "W-FRI"
 COST_BPS = 2.0
+VOL_TARGET_MODE = "realized"  # "realized" = edadfda default; "ex_ante" = a-priori 18c3239
 
 
-def build_weights(adj_close: pd.DataFrame, lag: int = 1) -> tuple:
+def build_weights(adj_close: pd.DataFrame, lag: int = 1,
+                  vol_target_mode: str = VOL_TARGET_MODE) -> tuple:
+    """Engine A weights.
+
+    vol_target_mode selects the portfolio vol-targeting overlay:
+      "realized" (default, commit edadfda) - scale by the strategy's OWN trailing
+          realized vol, which captures cross-asset correlation.
+      "ex_ante" (commit 18c3239) - scale by a per-asset marginal-vol proxy that
+          ignores correlation. This is the A-PRIORI spec that produced the
+          official kill-rule verdict of net Sharpe 0.61, kept reproducible from
+          HEAD so cost-inclusive results can be reported against the number the
+          verdict actually rests on.
+    """
+    if vol_target_mode not in ("realized", "ex_ante"):
+        raise ValueError(f"unknown vol_target_mode: {vol_target_mode!r}")
     rets = adj_close.pct_change(fill_method=None)
     tickers = list(adj_close.columns)
 
@@ -65,6 +80,15 @@ def build_weights(adj_close: pd.DataFrame, lag: int = 1) -> tuple:
         denom = score[cols].abs().sum(axis=1).replace(0, np.nan)  # = sum|score| within class
         # class contributes 1/K of the (corr-ignoring) marginal-vol budget
         w_raw[cols] = inv[cols].div(denom, axis=0).fillna(0.0) / K
+
+    if vol_target_mode == "ex_ante":
+        # a-priori spec (18c3239): per-asset marginal-vol proxy, ignores correlation
+        vol_proxy = np.sqrt(((w_raw * vol) ** 2).sum(axis=1)).replace(0, np.nan)
+        lev = (TARGET_PORT_VOL / vol_proxy).clip(upper=LEV_CAP).fillna(0.0)
+        w_scaled = w_raw.mul(lev, axis=0)
+        weekly = w_scaled.resample(REBALANCE).last()
+        w = weekly.reindex(w_scaled.index, method="ffill").fillna(0.0).shift(lag).fillna(0.0)
+        return w, rets
 
     # weekly rebalance the risk-parity weights, then lag (causal)
     weekly = w_raw.resample(REBALANCE).last()

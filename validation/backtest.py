@@ -22,11 +22,17 @@ import pandas as pd
 TRADING_DAYS = 252
 
 
-def run(weights: pd.DataFrame, returns: pd.DataFrame, cost_bps: float = 2.0) -> pd.DataFrame:
+def run(weights: pd.DataFrame, returns: pd.DataFrame, cost_bps: float = 2.0,
+        extra_cost: pd.Series = None) -> pd.DataFrame:
     """Return a frame with gross, cost, net daily portfolio returns and equity.
 
     weights and returns are aligned wide frames (index=date, columns=tickers).
     cost_bps is per unit of turnover per side (2.0 = 2 basis points).
+
+    extra_cost is an optional daily carrying-cost series (fraction of NAV per
+    day) added on top of turnover cost - used for stock-borrow on the short leg
+    and margin financing on leverage; see validation/costs.py. Default None
+    reproduces every result computed through commit edadfda bit-for-bit.
     """
     w = weights.reindex_like(returns).fillna(0.0)
     r = returns.fillna(0.0)
@@ -35,6 +41,9 @@ def run(weights: pd.DataFrame, returns: pd.DataFrame, cost_bps: float = 2.0) -> 
     turnover = w.diff().abs().sum(axis=1)
     turnover.iloc[0] = w.iloc[0].abs().sum()  # initial establishment of positions
     cost = turnover * (cost_bps / 1e4)
+
+    if extra_cost is not None:
+        cost = cost + extra_cost.reindex(cost.index).fillna(0.0)
 
     net = gross - cost
     out = pd.DataFrame({"gross": gross, "cost": cost, "net": net})
