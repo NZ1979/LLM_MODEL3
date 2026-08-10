@@ -59,6 +59,22 @@ def _row(label, m):
           f"{m['rolling1y_frac_positive']:>5.0%}   {verdict}")
 
 
+def leak_check(px, mode, debit, credit):
+    """Re-run the lag test on the FINAL cost basis.
+
+    Additive diagnostics only - does not touch the gate spec or its result. A
+    deliberately leaked lag-0 book (positions decided on same-day information)
+    must score far higher than the causal lag-1 book, and lag-2 must decay
+    further. Monotonic decay is evidence the harness detects look-ahead and that
+    the reported number sits on the honest side of it.
+    """
+    out = []
+    for lag in (0, 1, 2):
+        w, rets = ea.build_weights(px, lag=lag, vol_target_mode=mode)
+        out.append(evaluate(w, rets, debit, credit)["net_sharpe"])
+    return out
+
+
 def main():
     print("Loading ETF panel...")
     px = load_panel().pivot(index="date", columns="ticker",
@@ -114,6 +130,19 @@ def main():
             print(f"    (kill-rule verdict is unaffected either way; it is "
                   f"adjudicated borrow-complete)")
             print(f"  {'*' * 90}")
+
+    print(f"\n{'=' * 98}")
+    print("LEAK RE-CHECK on the final cost basis (borrow + measured financing)")
+    print("  expect lag0 >> lag1 > lag2; lag0 is deliberately leaked and must NOT be")
+    print("  close to lag1. A flat or inverted profile means the harness is not")
+    print("  detecting look-ahead and every number above is suspect.")
+    print(f"{'=' * 98}")
+    _, debit, credit = rate_legs(px.index)
+    for mode in (ADJUDICATING_MODE, "realized"):
+        s0, s1, s2 = leak_check(px, mode, debit, credit)
+        ok = s0 > s1 > s2
+        print(f"  {mode:9s} lag0 {s0:.2f} -> lag1 {s1:.2f} -> lag2 {s2:.2f}   "
+              f"monotonic decay: {ok}   {'OK' if ok else 'INVESTIGATE'}")
 
 
 if __name__ == "__main__":
