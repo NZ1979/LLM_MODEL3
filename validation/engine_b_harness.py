@@ -32,6 +32,7 @@ MONTHS_PER_YEAR = 12
 N_DECILES = 10
 COST_SIDES_BPS = (5.0, 10.0, 20.0)   # sensitivity grid (bps per side)
 COST_DEFAULT_BPS = 10.0              # pre-registered baseline (spec "Cost basis")
+SHUFFLE_SEED = 20260810             # fixed -> the shuffle control is reproducible
 
 
 # ----------------------------------------------------------------------------
@@ -277,13 +278,16 @@ def leak_audit(panel: pd.DataFrame, ret_col="fwd_ret_21") -> dict:
     cheat_ic = ic_summary(rank_ic_series(cheat))
     cheat_mono = monotonicity(decile_table(cheat, ret_col))
 
-    # deterministic within-date shuffle (roll by 1 in permaticker order - no RNG)
+    # within-date RANDOM permutation of the forward return (seeded -> reproducible).
+    # A roll/shift is NOT sufficient: with sector-clustered permatickers, neighbours
+    # share market/sector moves, so a one-position roll leaves real cross-sectional
+    # correlation intact and manufactures a spurious IC. A true permutation removes
+    # it, so a non-zero shuffle IC then means a genuine pipeline leak, not an artefact.
+    rgen = np.random.default_rng(SHUFFLE_SEED)
     shuf = p.copy()
     shuf["composite"] = np.nan
     for dt, g in shuf.groupby("date"):
-        gg = g.sort_values("permaticker")
-        rolled = np.roll(gg[ret_col].values, 1)
-        shuf.loc[gg.index, "composite"] = rolled
+        shuf.loc[g.index, "composite"] = rgen.permutation(g[ret_col].values)
     shuf_ic = ic_summary(rank_ic_series(shuf))
 
     return {

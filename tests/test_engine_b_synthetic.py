@@ -70,15 +70,25 @@ def make_panel(seed: int, n_names: int = 30, alpha_scale: float = 0.0009,
     """
     rng = np.random.default_rng(seed)
     days = _bdays(start, end)
+    nd = len(days)
     alphas = np.linspace(-alpha_scale, alpha_scale, n_names)
     rng.shuffle(alphas)
+    # common market + sector shocks make returns cross-sectionally correlated, with
+    # sectors on CONTIGUOUS permaticker blocks (as in the real panel). This exercises
+    # the leak-audit shuffle control under realistic adjacency: a naive roll-by-1
+    # shuffle would trip on it; a true permutation must not.
+    n_sectors = max(2, n_names // 8)
+    sector_of = np.repeat(np.arange(n_sectors),
+                          int(np.ceil(n_names / n_sectors)))[:n_names]
+    mkt = 0.006 * rng.standard_normal(nd)
+    sec = 0.005 * rng.standard_normal((nd, n_sectors))
 
     tickers, sep, daily, fund = [], [], [], []
     permaticker = 1000
     for i in range(n_names):
         tkr = f"SYN{i:02d}"
         p0 = float(rng.uniform(15, 90))
-        rets = alphas[i] + sigma * rng.standard_normal(len(days))
+        rets = alphas[i] + mkt + sec[:, sector_of[i]] + sigma * rng.standard_normal(nd)
         px = p0 * np.exp(np.cumsum(rets))
         vol = rng.uniform(0.8e6, 3e6, len(days))
         # a couple of deliberately illiquid / out-of-band names for the screen
