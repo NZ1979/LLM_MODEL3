@@ -17,6 +17,7 @@ statsmodels
 # Data access
 requests           # Polygon REST
 python-dotenv      # load .env into environment
+duckdb             # bulk Sharadar CSV->parquet conversion (Engine B panel, P3)
 
 # Tooling
 pytest
