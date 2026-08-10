@@ -43,11 +43,37 @@ LEV_CAP = 2.5
 REBALANCE = "W-FRI"
 COST_BPS = 2.0
 VOL_TARGET_MODE = "realized"  # "realized" = edadfda default; "ex_ante" = a-priori 18c3239
+GROSS_CAP = None              # None = uncapped (as adjudicated). See docs/ENGINE_A_CAPPED_SPEC.md
+
+
+def apply_gross_cap(w: pd.DataFrame, gross_cap: float) -> pd.DataFrame:
+    """Scale each day's book down so total gross exposure never exceeds gross_cap.
+
+    Applied to weights that are ALREADY LAGGED, and the scalar is a function of
+    those same weights, so it introduces no new information and cannot leak: if
+    you knew the position yesterday you knew its gross today.
+
+    Scales down only (clip at 1.0) - it is a constraint, not a leverage target,
+    so it never adds exposure on a quiet day.
+    """
+    if gross_cap is None:
+        return w
+    if gross_cap <= 0:
+        raise ValueError(f"gross_cap must be positive, got {gross_cap}")
+    gross = w.abs().sum(axis=1)
+    scale = (gross_cap / gross.replace(0.0, np.nan)).clip(upper=1.0).fillna(1.0)
+    return w.mul(scale, axis=0)
 
 
 def build_weights(adj_close: pd.DataFrame, lag: int = 1,
-                  vol_target_mode: str = VOL_TARGET_MODE) -> tuple:
+                  vol_target_mode: str = VOL_TARGET_MODE,
+                  gross_cap: float = GROSS_CAP) -> tuple:
     """Engine A weights.
+
+    gross_cap, if set, caps total gross exposure (sum of |weights|) as a final
+    constraint. Default None leaves the engine exactly as adjudicated. A capped
+    run is a SEPARATE a-priori candidate, not a re-tune - see
+    docs/ENGINE_A_CAPPED_SPEC.md.
 
     vol_target_mode selects the portfolio vol-targeting overlay:
       "realized" (default, commit edadfda) - scale by the strategy's OWN trailing
@@ -88,7 +114,7 @@ def build_weights(adj_close: pd.DataFrame, lag: int = 1,
         w_scaled = w_raw.mul(lev, axis=0)
         weekly = w_scaled.resample(REBALANCE).last()
         w = weekly.reindex(w_scaled.index, method="ffill").fillna(0.0).shift(lag).fillna(0.0)
-        return w, rets
+        return apply_gross_cap(w, gross_cap), rets
 
     # weekly rebalance the risk-parity weights, then lag (causal)
     weekly = w_raw.resample(REBALANCE).last()
@@ -102,7 +128,7 @@ def build_weights(adj_close: pd.DataFrame, lag: int = 1,
     lev = (TARGET_PORT_VOL / realized_vol.replace(0, np.nan)).clip(upper=LEV_CAP)
     lev = lev.shift(1).fillna(0.0)
     w = w_base.mul(lev, axis=0).fillna(0.0)
-    return w, rets
+    return apply_gross_cap(w, gross_cap), rets
 
 
 def first_active_date(weights: pd.DataFrame) -> pd.Timestamp:
