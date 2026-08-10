@@ -191,3 +191,20 @@ net of costs. Concretely:
   hold-out period, metrics, anticipated outcome, and failure handling all fixed
   before any IC or decile return was computed on the panel. No result exists under
   this spec at commit time.
+- 2026-08-10 (implementation session) - Two mechanical points the original spec
+  left implicit, fixed here BEFORE any result was computed on the panel (still no
+  result exists under the spec at this commit):
+  (a) **Missing fundamentals.** Momentum, low-vol and size are always computable
+  for an eligible name; value and quality need an ART filing with datekey <= T. A
+  name with no such filing cannot have the five-factor composite the spec defines,
+  so it is excluded from that month's RANKED set (not from the universe/panel) and
+  the exclusion is counted and reported. This is a ranking-set restriction, not a
+  new universe screen; the name is rankable again the moment it has a filing.
+  (b) **Factor window anchoring.** Trailing realised-vol, median dollar-volume and
+  history-count use the name's own trading rows (252/60/all rows <= T); 12-1
+  momentum and the 21-day forward label are anchored on the market calendar
+  (distinct trade dates) so a single name's gaps cannot shift the horizon. Every
+  read is as-of (<=) T. These choices are exercised by tests/test_engine_b_synthetic.py,
+  which cross-checks the DuckDB timing layer field-by-field against an independent
+  pandas oracle and confirms the harness flags a planted look-ahead. Still no
+  measuring result exists under this spec at this commit.
