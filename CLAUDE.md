@@ -51,4 +51,5 @@ Environment variables only - never in tracked files. `.env` is gitignored; `.env
 - Times in any schedule/config are America/Denver unless stated; handle DST.
 - Python: use the repo `.venv`. Dependencies in `requirements.txt`.
 - Build sequence is P0→P5 (see `PROJECT_CHARTER.md` §7). Don't build strategy logic ahead of the sequence.
-- **Engine A focus (operator directive 2026-06-17):** do not build or discuss Engine B (cross-sectional ML, equity panel, Norgate, LLM features) until Engine A is built, run, and adjudicated by the kill rule. Keep all attention on Engine A until then.
+- **Engine A focus directive (2026-06-17): DISCHARGED 2026-08-10.** Engine A was built, run, and adjudicated (PASS, net Sharpe 0.59 borrow-complete), then closed as a research result because it is not safely implementable; the capped A-2 variant was pre-registered, evaluated once, and missed. Engine B is now the active work (P3: survivorship-bias-free equity panel + mechanical cross-sectional baseline BEFORE any ML/LLM). See `PROJECT_CHARTER.md` section 9.
+- **Engine A is settled. Do not re-tune, re-cap, or re-adjudicate it** to chase a tradeable version. Any further Engine A work needs a fresh, dated pre-registration stating why it asks a new question rather than retrying a settled one.

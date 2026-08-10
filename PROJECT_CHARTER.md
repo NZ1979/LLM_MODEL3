@@ -86,3 +86,38 @@ The pre-committed thresholds live in `KILL_RULE.md` and were **locked by the ope
 **Engine B survivorship-free equity panel: deferred to P3.** When the panel is built, evaluate **Norgate Data** (Platinum, survivorship-free delisted history back to 1990, Windows-native) - the only surveyed source that solves delisting/survivorship cleanly. Not purchased now to avoid front-loading cost before Engine A proves the harness (Rule 7).
 
 Secrets via environment variables only; see `.env.example`.
+
+## 9. Operator decision log
+
+Dated, recorded decisions that change the project's direction. Append only.
+
+### 2026-08-10 - Engine A closed out; Engine B opened
+
+**Engine A is closed as a research result, not carried to paper trading.**
+
+- Its kill-rule verdict **stands: PASS at net Sharpe 0.59**, borrow-complete,
+  80% of rolling 1-year windows positive (a-priori spec `18c3239`). See
+  `docs/COST_COMPLETENESS_RESULTS.md`. The borrow debt named in `KILL_RULE.md`
+  is closed.
+- It also cleared the pre-paper financing realism gate at 0.45
+  (`docs/FINANCING_SPEC.md`).
+- **But it is not safely implementable.** It requires 3.70x mean gross exposure
+  (6.81x peak) and fails once financing exceeds DTB3 +200 bps. The account type
+  that could hold the exposure is the one whose financing costs sink it.
+- The gross-capped variant **Engine A-2 was pre-registered and evaluated once,
+  and missed** (`docs/ENGINE_A2_RESULTS.md`): it cleared the kill-rule bar at
+  0.44 but failed at DTB3 +200 bps (0.40, below the bar unrounded) and with zero
+  cash credit (0.38). Per its own spec, no further cap levels are to be tried.
+- `docs/PAPER_TRADING_PLAN.md` is therefore **dormant**.
+
+**Decision: proceed to Engine B.** The charter's design was always two
+low-correlation engines, and the 2026-06-17 directive to defer B is now
+discharged - Engine A has been built, run, and adjudicated. Engine A's result is
+banked as-is; it is not to be re-tuned, re-capped, or re-adjudicated in pursuit
+of a tradeable version. Any future Engine A work requires a fresh, dated
+pre-registration stating why it asks a new question rather than retrying a
+settled one.
+
+Next build step is **P3**: the survivorship-bias-free equity panel (evaluate
+Norgate) and a mechanical cross-sectional baseline, **before** any ML or LLM
+layer, per section 5 and the Engine B bar in `KILL_RULE.md`.

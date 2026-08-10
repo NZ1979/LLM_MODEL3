@@ -12,7 +12,13 @@ records a dated decision. `CLAUDE.md`: "No real money until an engine clears
 | Engine A kill rule, borrow-complete | **PASS**, net Sharpe 0.59 | `COST_COMPLETENESS_RESULTS.md` |
 | Engine A pre-paper financing gate | **PASS**, 0.45 | ditto |
 | Engine A implementability | **FAIL** | 3.70x mean gross / 6.81x peak; fails at DTB3 +200 bps |
-| Engine A-2 (gross-capped 2.0x) | **NOT YET EVALUATED** | `ENGINE_A_CAPPED_SPEC.md` |
+| Engine A-2 (gross-capped 2.0x) | **FAIL** - conditions 4 and 5 missed | `ENGINE_A2_RESULTS.md` |
+
+> **THIS PLAN IS DORMANT AS OF 2026-08-10.** A-2 was evaluated and missed
+> conditions 4 (DTB3 +200 bps: 0.40, below the bar unrounded) and 5 (zero cash
+> credit: 0.38). Per `ENGINE_A_CAPPED_SPEC.md` the response is NOT another cap
+> level. Sections 1-7 below are retained as the plan that would apply if a
+> future candidate clears its gate; none of it activates now.
 
 **Nothing goes to paper until A-2 is evaluated.** Engine A itself is validated but
 unimplementable: the account type that could hold 6.81x gross is the same one
