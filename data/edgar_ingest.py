@@ -150,20 +150,26 @@ def primary_doc_url(cik, accession: str, primary_document: str) -> str:
     return ARCHIVE_DOC_URL.format(cik=int(canon_cik(cik)), acc=acc, doc=primary_document)
 
 
-def full_submission_url(cik, accession: str) -> str:
-    acc = str(accession).replace("-", "")
+def full_submission_url(cik, accession: str, dashed: bool = False) -> str:
+    """The complete-submission .txt. Post-~2001 filings live at the no-dash
+    accession (.../{acc_nodash}.txt); pre-2001 filings live at the DASHED
+    accession (.../{acc-with-dashes}.txt) - the real-filing smoke test surfaced
+    404s on old filings from the no-dash form."""
+    acc = str(accession) if dashed else str(accession).replace("-", "")
     return ARCHIVE_TXT_URL.format(cik=int(canon_cik(cik)), acc=acc)
 
 
-def doc_fetch_plan(cik, accession: str, primary_document) -> tuple[str, bool]:
-    """(url, is_html). A blank primaryDocument (common pre-2001) -> the full
-    submission .txt (SGML), parsed as plain text; else the primary document,
-    treated as HTML iff its name ends in .htm/.html."""
+def doc_fetch_plan(cik, accession: str, primary_document) -> tuple[list[str], bool]:
+    """(candidate_urls, is_html). A blank primaryDocument (common pre-2001) -> the
+    full-submission .txt, tried no-dash first then dashed (old filings); else the
+    primary document, treated as HTML iff its name ends in .htm/.html. fetch a
+    list so fetch_document can fall through 404s (Spec 2 sec 1.2)."""
     pd_str = "" if primary_document is None else str(primary_document).strip()
     if not pd_str or pd_str.lower() in ("nan", "none"):
-        return full_submission_url(cik, accession), False
+        return ([full_submission_url(cik, accession, dashed=False),
+                 full_submission_url(cik, accession, dashed=True)], False)
     is_html = pd_str.lower().endswith((".htm", ".html"))
-    return primary_doc_url(cik, accession, pd_str), is_html
+    return ([primary_doc_url(cik, accession, pd_str)], is_html)
 
 
 # ---------------------------------------------------------------------------
@@ -229,27 +235,39 @@ def fetch_all_filing_blocks(submissions: dict, ua: str, limiter: RateLimiter) ->
     return recent, payloads
 
 
-def fetch_document(url: str, ua: str, limiter: RateLimiter, cache_path: Path | None = None,
+def fetch_document(url_or_urls, ua: str, limiter: RateLimiter, cache_path: Path | None = None,
                    retries: int = 4) -> str:
-    """Fetch a filing document. If cache_path is given, read/write it (gitignored
-    corpus cache); if None, fetch without caching (e.g. the read-only smoke test).
-    Godzilla only."""
+    """Fetch a filing document. `url_or_urls` may be a single URL or an ordered
+    list of candidates (e.g. no-dash then dashed .txt); a 404 falls through to the
+    next candidate, other HTTP errors retry then fail loud. If cache_path is given,
+    read/write it (gitignored corpus cache); if None, fetch without caching (e.g.
+    the read-only smoke test). Godzilla only."""
     if cache_path is not None:
         cache_path = Path(cache_path)
         if cache_path.exists():
             return cache_path.read_text(encoding="utf-8", errors="replace")
-    for attempt in range(retries):
-        limiter.wait()
-        try:
-            raw = _http_get(url, ua)
+    urls = [url_or_urls] if isinstance(url_or_urls, str) else list(url_or_urls)
+    raw = None
+    last_404 = None
+    for url in urls:
+        for attempt in range(retries):
+            limiter.wait()
+            try:
+                raw = _http_get(url, ua)
+                break
+            except urllib.error.HTTPError as e:
+                if e.code == 404:
+                    last_404 = url
+                    break  # try the next candidate URL
+                if e.code in (429, 503) and attempt < retries - 1:
+                    time.sleep(2.0 * (attempt + 1))
+                    continue
+                raise RuntimeError(f"EDGAR document fetch failed HTTP {e.code} :: {url}")
+        if raw is not None:
             break
-        except urllib.error.HTTPError as e:
-            if e.code in (429, 503) and attempt < retries - 1:
-                time.sleep(2.0 * (attempt + 1))
-                continue
-            raise RuntimeError(f"EDGAR document fetch failed HTTP {e.code} :: {url}")
-    else:
-        raise RuntimeError(f"EDGAR document fetch exhausted retries :: {url}")
+    if raw is None:
+        raise RuntimeError(f"EDGAR document fetch 404 on all candidates :: {urls} "
+                           f"(last {last_404})")
     text = raw.decode("utf-8", "replace")
     if cache_path is not None:
         cache_path.parent.mkdir(parents=True, exist_ok=True)

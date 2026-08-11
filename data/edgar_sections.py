@@ -11,9 +11,17 @@ Factors section -> that section returns None and is COUNTED, never zero-filled.
 """
 from __future__ import annotations
 
+import html
 import re
 
 MIN_SECTION_CHARS = 200   # a located span shorter than this is a TOC artefact -> None
+
+# Modern filings use typographic punctuation (Management’s, not Management's) and
+# HTML entities. Decode entities and fold smart quotes/dashes to ASCII so the item
+# regexes are simple and robust (the real-filing smoke test surfaced MD&A misses
+# from an undecoded apostrophe).
+_SMART = {0x2019: "'", 0x2018: "'", 0x201C: '"', 0x201D: '"',
+          0x2013: "-", 0x2014: "-", 0x00A0: " ", 0x0092: "'", 0x0093: '"', 0x0094: '"'}
 
 try:
     from bs4 import BeautifulSoup
@@ -25,19 +33,16 @@ except Exception:   # pragma: no cover - lxml/bs4 present on Godzilla .venv
 # ---------------------------------------------------------------------------
 # Text extraction from the two on-disk formats
 # ---------------------------------------------------------------------------
-def html_to_text(html: str) -> str:
+def html_to_text(raw_html: str) -> str:
     """Render filing HTML / inline-XBRL to plain text with block separators."""
     if _HAVE_BS4:
-        soup = BeautifulSoup(html, "lxml")
+        soup = BeautifulSoup(raw_html, "lxml")
         for tag in soup(["script", "style"]):
             tag.decompose()
         text = soup.get_text("\n")
     else:   # regex fallback (used only if bs4/lxml missing)
-        text = re.sub(r"(?is)<(script|style).*?>.*?</\1>", " ", html)
+        text = re.sub(r"(?is)<(script|style).*?>.*?</\1>", " ", raw_html)
         text = re.sub(r"(?s)<[^>]+>", "\n", text)
-    text = re.sub(r"&nbsp;", " ", text, flags=re.I)
-    text = re.sub(r"&amp;", "&", text, flags=re.I)
-    text = re.sub(r"&#\d+;", " ", text)
     return _normalize_ws(text)
 
 
@@ -64,15 +69,15 @@ def sgml_primary_text(sgml: str, form: str) -> str:
     else:
         matched = [b for t, b in candidates if t == want or t.rstrip("/A") == want]
         body = max(matched, key=len) if matched else max((b for _, b in candidates), key=len)
-    # strip any residual tags, decode a couple of entities
+    # strip any residual tags; entity decode + whitespace handled by _normalize_ws
     body = re.sub(r"(?s)<[^>]+>", "\n", body)
-    body = re.sub(r"&nbsp;", " ", body, flags=re.I)
-    body = re.sub(r"&amp;", "&", body, flags=re.I)
     return _normalize_ws(body)
 
 
 def _normalize_ws(text: str) -> str:
-    text = text.replace("\xa0", " ").replace("\r", "\n")
+    text = html.unescape(text)                 # &#8217; / &amp; / &nbsp; -> unicode
+    text = text.translate(_SMART)              # smart quotes/dashes/nbsp -> ASCII
+    text = text.replace("\r", "\n")
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r"\n[ \t]*", "\n", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
@@ -83,20 +88,24 @@ def _normalize_ws(text: str) -> str:
 # Section location (the "longest candidate" heuristic beats the table-of-contents)
 # ---------------------------------------------------------------------------
 def _item_start(num: str, title: str | None = None) -> re.Pattern:
-    """A start header like 'Item 7.' or 'Item 1A. Risk Factors'. Tolerant of
-    whitespace/punctuation. If a title is given, require it near the number to
-    reduce table-of-contents false hits."""
-    core = rf"item\s*{num}\s*[\.\:\)\-]?"
+    """A start header like 'Item 7.' or 'Item 1A. Risk Factors'. Anchored to the
+    start of a line so mid-sentence cross-references ('see Item 1A. Risk Factors
+    and ...') do not become false section starts; the real header sits on its own
+    line after HTML->text. Tolerant of whitespace/punctuation; a given title is
+    required near the number to further cut table-of-contents false hits."""
+    core = rf"(?:^|\n)\s*item\s*{num}\s*[\.\:\)\-]?"
     if title:
         core += rf"\s*{title}"
     return re.compile(core, re.IGNORECASE)
 
 
 def _first_of(*nums_titles) -> re.Pattern:
-    """An end header matching the first of several 'Item N' markers."""
+    """An end header matching the first of several 'Item N' markers, line-anchored
+    so a mid-sentence cross-reference ('see Item 8') cannot prematurely end a
+    section (only a real header on its own line closes it)."""
     alts = []
     for num in nums_titles:
-        alts.append(rf"item\s*{num}\s*[\.\:\)\-]?")
+        alts.append(rf"(?:^|\n)\s*item\s*{num}\s*[\.\:\)\-]?")
     return re.compile("|".join(alts), re.IGNORECASE)
 
 
@@ -130,14 +139,14 @@ def extract_sections(raw: str, form: str, is_html: bool) -> dict:
 
     if bf.startswith("10-Q"):
         mdna = _locate(text,
-                       _item_start("2", r"management'?s"),
+                       _item_start("2", r"management['\s]*s"),
                        _first_of("3", "4"))
         rf = _locate(text,
                      _item_start("1A", r"risk\s+factors"),
                      _first_of("2", "3", "5", "6"))
     else:  # 10-K and all historical annual variants
         mdna = _locate(text,
-                       _item_start("7", r"management'?s"),
+                       _item_start("7", r"management['\s]*s"),
                        _first_of("7A", "8"))
         rf = _locate(text,
                      _item_start("1A", r"risk\s+factors"),

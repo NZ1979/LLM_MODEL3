@@ -77,9 +77,10 @@ def test_ingest_helpers():
     url = ing.primary_doc_url(806085, "0000806085-08-000042", "lehman10k.htm")
     check("primary doc url (CIK no leading zeros, accession keeps them)", url ==
           "https://www.sec.gov/Archives/edgar/data/806085/000080608508000042/lehman10k.htm", url)
-    plan_url, is_html = ing.doc_fetch_plan(806085, "0000806085-98-000010", "")
-    check("blank primaryDocument -> full .txt, not html",
-          plan_url.endswith("/000080608598000010.txt") and not is_html, plan_url)
+    urls, is_html = ing.doc_fetch_plan(806085, "0000806085-98-000010", "")
+    check("blank primaryDocument -> full .txt (no-dash then dashed), not html",
+          (not is_html) and urls[0].endswith("/000080608598000010.txt")
+          and urls[1].endswith("/0000806085-98-000010.txt"), str(urls))
 
     recent = {
         "form": ["10-K", "10-K/A", "8-K", "10-Q", "4"],
@@ -233,8 +234,9 @@ def _modern_10k_html():
     We may be adversely affected by litigation and by liquidity constraints.</p>
     <p>Item 1B. Unresolved Staff Comments</p><p>None.</p>
     <p>Item 2. Properties</p><p>We lease offices.</p>
-    <p>Item 7. Management's Discussion and Analysis of Financial Condition</p>
-    <p>Revenue rose and management discusses results of operations and liquidity. {_FILLER}
+    <p>Item 7. Management&#8217;s Discussion and Analysis of Financial Condition</p>
+    <p>See Item 8 for the financial statements referenced below. Revenue rose and
+    management discusses results of operations and liquidity. {_FILLER}
     Cash flow and capital resources are described here at length.</p>
     <p>Item 7A. Quantitative Disclosures</p><p>Market risk.</p>
     <p>Item 8. Financial Statements</p><p>See attached.</p>

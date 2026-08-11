@@ -113,9 +113,9 @@ def main() -> None:
             if len(tens) > 1:
                 picks.append(("oldest 10-K", tens.loc[tens.acceptance_date.idxmin()]))
         for tag, row in picks:
-            url, is_html = ing.doc_fetch_plan(cik, row["accession"], row["primary_document"])
+            urls, is_html = ing.doc_fetch_plan(cik, row["accession"], row["primary_document"])
             try:
-                raw = ing.fetch_document(url, ua, lim, cache_path=None)
+                raw = ing.fetch_document(urls, ua, lim, cache_path=None)
             except Exception as e:  # noqa: BLE001
                 print(f"  {tag}: ERROR fetching doc: {type(e).__name__}: {e}")
                 continue
