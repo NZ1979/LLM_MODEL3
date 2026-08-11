@@ -80,6 +80,9 @@ def main() -> None:
                     help="exact Claude model id (recorded in metadata, Spec 2 sec 4.2)")
     ap.add_argument("--raw-dir", default=str(DEFAULT_RAW))
     ap.add_argument("--edgar-dir", default=str(EDGAR))
+    ap.add_argument("--out", default="", help="output parquet path (default "
+                    "data/raw/edgar/features_llm.parquet); use a tagged name to "
+                    "compare models without overwriting, e.g. features_llm_haiku.parquet")
     ap.add_argument("--pilot-limit", type=int, default=0, help="cap filings for a cost pilot")
     ap.add_argument("--unmasked-sample", type=int, default=0,
                     help="also extract N filings UNMASKED (paired data for the sec-5 probe)")
@@ -125,7 +128,11 @@ def main() -> None:
 
     feat_df = pd.DataFrame(rows)
     edgar.mkdir(parents=True, exist_ok=True)
-    feat_df.to_parquet(edgar / "features_llm.parquet", index=False)
+    out_path = Path(args.out) if args.out else edgar / "features_llm.parquet"
+    if not out_path.is_absolute():
+        out_path = edgar / out_path
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    feat_df.to_parquet(out_path, index=False)
 
     # optional paired UNMASKED extractions for the sec-5 masked hindsight-probe
     if args.unmasked_sample:
@@ -139,14 +146,14 @@ def main() -> None:
             up_rf, _ = elf.prepare_for_extraction(r["prior_rf"], mask=False)
             uf = extractor.extract(um_mdna, um_rf, up_mdna, up_rf)
             urows.append({"accession": r["accession"], **{f"{k}_unmasked": v for k, v in uf.items()}})
-        pd.DataFrame(urows).to_parquet(edgar / "features_llm_unmasked_sample.parquet", index=False)
+        pd.DataFrame(urows).to_parquet(out_path.parent / f"{out_path.stem}_unmasked_sample.parquet", index=False)
 
     meta = {"model": args.model, "prompt_version": elf.PROMPT_VERSION,
             "n_filings": int(len(feat_df)), "api_calls": extractor.calls,
             "cache_hits": extractor.cache_hits, "truncated_filings": int(trunc_any),
             "head_chars": elf.HEAD_CHARS, "tail_chars": elf.TAIL_CHARS,
-            "pilot_limit": args.pilot_limit}
-    (edgar / "_features_llm_metadata.json").write_text(json.dumps(meta, indent=2))
+            "pilot_limit": args.pilot_limit, "out": str(out_path)}
+    (out_path.parent / f"_{out_path.stem}_metadata.json").write_text(json.dumps(meta, indent=2))
 
     print("\n" + "=" * 72)
     print(f"model={args.model}  prompt={elf.PROMPT_VERSION}")
@@ -158,7 +165,7 @@ def main() -> None:
         cov = len(s) / max(1, len(feat_df))
         print(f"  {f:<24} cov {cov*100:5.1f}%   mean {s.mean():+.3f}" if len(s)
               else f"  {f:<24} cov   0.0%   (all NaN)")
-    print(f"  wrote {edgar/'features_llm.parquet'}")
+    print(f"  wrote {out_path}")
     print("=" * 72)
     print("\n(Pilot: check cost (api_calls), truncation rate, and that coverage/means "
           "look sane. Then the full build-span extraction + the sec-5 audit. Paste this back.)")
