@@ -78,19 +78,29 @@ _DATE_RE = re.compile(
 _NUMERIC_DATE_RE = re.compile(r"\b\d{1,2}/\d{1,2}/\d{2,4}\b")
 
 
-def _name_tokens(name: str) -> list[str]:
+def _as_text(x):
+    """Coerce to a non-empty str, or None. Treats None, NaN (float), and blank as
+    absent - parquet/pivot give NaN, not None, for a missing section (Rule 18: an
+    absent section is absent, never a stray float scored as if it were text)."""
+    if isinstance(x, str):
+        return x if x.strip() else None
+    return None
+
+
+def _name_tokens(name) -> list[str]:
     """Distinctive tokens of a registrant name, minus corporate-suffix noise."""
     stop = {"inc", "corp", "corporation", "company", "co", "ltd", "llc", "lp",
             "plc", "the", "and", "of", "group", "holdings", "holding", "trust",
             "sa", "nv", "ag", "class", "common", "stock", "&"}
-    toks = re.findall(r"[A-Za-z][A-Za-z\-']+", str(name or ""))
+    toks = re.findall(r"[A-Za-z][A-Za-z\-']+", name if isinstance(name, str) else "")
     return [t for t in toks if len(t) >= 3 and t.lower() not in stop]
 
 
-def mask_identity(text: str, name: str | None = None, ticker: str | None = None,
-                  cik=None, extra_aliases: list[str] | None = None) -> str:
+def mask_identity(text, name=None, ticker=None, cik=None, extra_aliases=None):
     """Redact registrant name tokens, ticker, CIK, and all dates/years. Dollar
-    amounts and operational descriptors are kept (descriptive, not identity)."""
+    amounts and operational descriptors are kept (descriptive, not identity).
+    Non-string text (None / NaN) returns None (absent)."""
+    text = _as_text(text)
     if text is None:
         return None
     out = text
@@ -99,10 +109,13 @@ def mask_identity(text: str, name: str | None = None, ticker: str | None = None,
     # longest-first so multi-word names redact before their fragments
     for a in sorted({a for a in aliases if a}, key=len, reverse=True):
         out = re.sub(rf"\b{re.escape(a)}\b", "[COMPANY]", out, flags=re.IGNORECASE)
-    if ticker:
-        out = re.sub(rf"\b{re.escape(str(ticker))}\b", "[TICKER]", out)
-    if cik is not None and str(cik).strip():
-        out = re.sub(rf"\b0*{re.escape(str(int(str(cik))))}\b", "[CIK]", out)
+    if isinstance(ticker, str) and ticker.strip():
+        out = re.sub(rf"\b{re.escape(ticker.strip())}\b", "[TICKER]", out)
+    if cik is not None and str(cik).strip().lower() not in ("", "nan", "none", "<na>"):
+        try:
+            out = re.sub(rf"\b0*{re.escape(str(int(float(str(cik)))))}\b", "[CIK]", out)
+        except (ValueError, TypeError):
+            pass
     out = _DATE_RE.sub("[DATE]", out)
     out = _NUMERIC_DATE_RE.sub("[DATE]", out)
     out = _YEAR_RE.sub("[YEAR]", out)
@@ -177,7 +190,9 @@ def truncate_section(text):
 
 
 def prepare_for_extraction(section, name=None, ticker=None, cik=None, mask=True):
-    """Mask identity (production default) then truncate. Returns (text, truncated)."""
+    """Mask identity (production default) then truncate. Returns (text, truncated).
+    A None/NaN/blank section is absent -> (None, False)."""
+    section = _as_text(section)
     if section is None:
         return None, False
     t = mask_identity(section, name=name, ticker=ticker, cik=cik) if mask else section

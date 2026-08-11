@@ -65,10 +65,12 @@ def _attach_priors(df: pd.DataFrame) -> pd.DataFrame:
         for i in g.index:
             df.at[i, "prior_mdna"] = last_mdna
             df.at[i, "prior_rf"] = last_rf
-            if g.at[i, "mdna"]:
-                last_mdna = g.at[i, "mdna"]
-            if g.at[i, "risk_factors"]:
-                last_rf = g.at[i, "risk_factors"]
+            cur_mdna = elf._as_text(g.at[i, "mdna"])   # NaN/blank -> None, never a prior
+            cur_rf = elf._as_text(g.at[i, "risk_factors"])
+            if cur_mdna:
+                last_mdna = cur_mdna
+            if cur_rf:
+                last_rf = cur_rf
     return df
 
 

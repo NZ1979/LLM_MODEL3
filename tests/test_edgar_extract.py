@@ -78,6 +78,14 @@ def test_prepare_and_prompt():
     check("prompt marks no prior", "No prior MD&A" in prompt)
     check("prompt has no raw identity", "Acme" not in prompt and "ACME" not in prompt)
 
+    # regression: pivot/parquet give NaN (float), not None, for a missing section
+    nan = float("nan")
+    check("NaN section -> absent (None, False)", elf.prepare_for_extraction(nan) == (None, False))
+    check("empty/blank section -> absent", elf.prepare_for_extraction("   ") == (None, False))
+    check("NaN identity fields do not crash mask",
+          elf.prepare_for_extraction("Some plain text here.", name=nan, ticker=nan, cik=nan)[0]
+          == "Some plain text here.")
+
 
 def test_extractor_nan_enforcement():
     print("\n[EXTRACT] NaN enforced for absent sections/priors; range clamped")
