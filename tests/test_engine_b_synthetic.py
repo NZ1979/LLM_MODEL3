@@ -418,6 +418,11 @@ def test_positive_and_null():
           mono["spearman_ret"] > 0.4, f"spearman(decile,ret)={mono['spearman_ret']:.2f}")
     check("positive control: composite IC not perversely negative",
           res["ic_summary"]["mean_ic"] > -0.03, f"composite_ic={res['ic_summary']['mean_ic']:.3f}")
+    apos = ebh.leak_audit(panel, score_col="momentum", reps=15)
+    check("positive control: real momentum IC sits far above the permutation null",
+          apos["real_vs_null_z"] > 4.0,
+          f"z={apos['real_vs_null_z']:.1f} (null_mean={apos['shuffle_null_mean']:.4f}, "
+          f"null_sd={apos['shuffle_null_sd']:.4f})")
 
     # null: no alpha -> IC ~ 0, insignificant
     tk0, sep0, daily0, fund0 = make_panel(seed=11, n_names=100, alpha_scale=0.0, sigma=0.010)
@@ -433,13 +438,16 @@ def test_leak_tripwire():
     print("\n[6] LEAK TRIPWIRE - harness flags a planted look-ahead")
     tk, sep, daily, fund = make_panel(seed=3, n_names=40, alpha_scale=0.0)
     built, panel, _ = _pipeline_metrics(tk, sep, daily, fund, ("2016-01-01", "2019-05-31"))
-    audit = ebh.leak_audit(panel)
+    audit = ebh.leak_audit(panel, reps=15)
     check("cheat score (=fwd return) drives IC ~ +1", audit["cheat_mean_ic"] > 0.95,
           f"cheat_ic={audit['cheat_mean_ic']:.3f}")
     check("cheat score gives a perfect decile staircase",
           audit["cheat_spearman_decile"] > 0.99, f"spearman={audit['cheat_spearman_decile']:.3f}")
-    check("within-date shuffle collapses IC to ~ 0", abs(audit["shuffle_mean_ic"]) < 0.05,
-          f"shuffle_ic={audit['shuffle_mean_ic']:.3f}")
+    check("permutation null centred at ~0 (no manufactured signal)",
+          abs(audit["shuffle_null_mean"]) < 0.01,
+          f"null_mean={audit['shuffle_null_mean']:.4f}, null_sd={audit['shuffle_null_sd']:.4f}")
+    check("null panel: real IC not far above its own permutation null",
+          abs(audit["real_vs_null_z"]) < 4.0, f"z={audit['real_vs_null_z']:.2f}")
 
 
 def main():

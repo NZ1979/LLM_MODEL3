@@ -32,7 +32,8 @@ MONTHS_PER_YEAR = 12
 N_DECILES = 10
 COST_SIDES_BPS = (5.0, 10.0, 20.0)   # sensitivity grid (bps per side)
 COST_DEFAULT_BPS = 10.0              # pre-registered baseline (spec "Cost basis")
-SHUFFLE_SEED = 20260810             # fixed -> the shuffle control is reproducible
+SHUFFLE_SEED = 20260810             # fixed -> the permutation null is reproducible
+SHUFFLE_REPS = 25                   # permutation-null seeds (one draw is too noisy)
 
 
 # ----------------------------------------------------------------------------
@@ -253,22 +254,29 @@ def long_short_spread(panel: pd.DataFrame, ret_col="fwd_ret_21") -> dict:
 # ----------------------------------------------------------------------------
 # Leak audit - plant a known look-ahead and confirm the harness would flag it
 # ----------------------------------------------------------------------------
-def leak_audit(panel: pd.DataFrame, ret_col="fwd_ret_21") -> dict:
-    """Controls that prove the harness is sensitive to look-ahead.
+def leak_audit(panel: pd.DataFrame, ret_col="fwd_ret_21", score_col="composite",
+               reps: int = SHUFFLE_REPS) -> dict:
+    """Controls that prove the harness is sensitive to look-ahead AND that the
+    real composite IC sits far above a permutation null.
 
     - cheat: set the score = the realised forward return. A leak-free harness
       MUST then report IC ~ +1 and a perfect decile staircase. This is the
       load-bearing test: it shows that IF a real leak existed, the harness would
       land squarely in the 'assume leakage' zone (IC > 0.10), so a modest real
       IC is trustworthy.
-    - shuffle: permute the forward return across names within each date. IC must
-      collapse to ~0 (no spurious signal manufactured by the pipeline).
+    - permutation null: permute the forward return across names within each date,
+      over `reps` independent seeds, and take each seed's mean IC. A single
+      permutation is one noisy draw (its t-stat can wander a couple SD from zero);
+      the DISTRIBUTION of seed means is the honest null. Report its mean (must be
+      ~0) and SD, and z = (real mean IC - null mean) / null SD - how many SD the
+      real signal sits above chance. A one-position roll is NOT used: with
+      sector-clustered permatickers, neighbours share moves and a roll leaves real
+      cross-sectional correlation intact, manufacturing a spurious IC.
     """
     p = panel[panel[ret_col].notna()].copy()
 
     cheat = p.copy()
     cheat["composite"] = cheat[ret_col]
-    # rebuild deciles on the cheat score within each date
     cheat["decile"] = np.nan
     for dt, g in cheat.groupby("date"):
         if len(g) >= N_DECILES:
@@ -278,23 +286,36 @@ def leak_audit(panel: pd.DataFrame, ret_col="fwd_ret_21") -> dict:
     cheat_ic = ic_summary(rank_ic_series(cheat))
     cheat_mono = monotonicity(decile_table(cheat, ret_col))
 
-    # within-date RANDOM permutation of the forward return (seeded -> reproducible).
-    # A roll/shift is NOT sufficient: with sector-clustered permatickers, neighbours
-    # share market/sector moves, so a one-position roll leaves real cross-sectional
-    # correlation intact and manufactures a spurious IC. A true permutation removes
-    # it, so a non-zero shuffle IC then means a genuine pipeline leak, not an artefact.
-    rgen = np.random.default_rng(SHUFFLE_SEED)
-    shuf = p.copy()
-    shuf["composite"] = np.nan
-    for dt, g in shuf.groupby("date"):
-        shuf.loc[g.index, "composite"] = rgen.permutation(g[ret_col].values)
-    shuf_ic = ic_summary(rank_ic_series(shuf))
+    real_ic = ic_summary(rank_ic_series(p, score_col=score_col))["mean_ic"]
+
+    # permutation null over `reps` seeds (positional/numpy - fast on large panels)
+    base = p[["date", ret_col]].reset_index(drop=True)
+    ret_vals = base[ret_col].to_numpy()
+    pos_by_date = [g.index.to_numpy() for _, g in base.groupby("date")]
+    seed_means = []
+    for k in range(reps):
+        rg = np.random.default_rng(SHUFFLE_SEED + k)
+        score = np.empty(len(base))
+        for pos in pos_by_date:
+            score[pos] = rg.permutation(ret_vals[pos])
+        tmp = base.copy()
+        tmp["composite"] = score
+        seed_means.append(ic_summary(rank_ic_series(tmp, ret_col=ret_col))["mean_ic"])
+    seed_means = np.array([m for m in seed_means if np.isfinite(m)])
+    null_mean = float(seed_means.mean()) if len(seed_means) else float("nan")
+    null_sd = float(seed_means.std(ddof=1)) if len(seed_means) > 1 else float("nan")
+    null_absmax = float(np.abs(seed_means).max()) if len(seed_means) else float("nan")
+    z = ((real_ic - null_mean) / null_sd) if (null_sd and np.isfinite(null_sd) and null_sd > 0) else float("nan")
 
     return {
         "cheat_mean_ic": cheat_ic["mean_ic"],
         "cheat_spearman_decile": cheat_mono["spearman_ret"],
-        "shuffle_mean_ic": shuf_ic["mean_ic"],
-        "shuffle_nw_t": shuf_ic["nw_tstat"],
+        "real_mean_ic": real_ic,
+        "shuffle_reps": int(len(seed_means)),
+        "shuffle_null_mean": null_mean,
+        "shuffle_null_sd": null_sd,
+        "shuffle_null_absmax": null_absmax,
+        "real_vs_null_z": z,
     }
 
 

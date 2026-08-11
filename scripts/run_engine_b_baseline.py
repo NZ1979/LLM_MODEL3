@@ -150,11 +150,15 @@ def print_report(a: dict, span_label: str, span) -> None:
           f"(NOT tradeable - shorting/borrow costs excluded)")
 
     # --- leak audit (harness proof) ---------------------------------------
-    print("\n[LEAK AUDIT] harness sensitivity controls (run on this same panel):")
+    print("\n[LEAK AUDIT] harness sensitivity + permutation null (same panel):")
     print(f"  cheat score = realised fwd return -> mean IC {audit['cheat_mean_ic']:+.3f}, "
           f"decile Spearman {audit['cheat_spearman_decile']:+.3f}  (expect ~+1 / +1)")
-    print(f"  within-date shuffle of returns    -> mean IC {audit['shuffle_mean_ic']:+.3f}, "
-          f"NW-t {audit['shuffle_nw_t']:+.2f}  (expect ~0 / insignificant)")
+    print(f"  permutation null ({audit['shuffle_reps']} seeds): mean IC "
+          f"{audit['shuffle_null_mean']:+.4f}, SD {audit['shuffle_null_sd']:.4f}, "
+          f"|max| {audit['shuffle_null_absmax']:.4f}  (expect mean ~0)")
+    print(f"  real mean IC {audit['real_mean_ic']:+.4f} sits "
+          f"{audit['real_vs_null_z']:+.1f} SD above the permutation null  "
+          f"(the signal is real, not a harness artefact if this is large & positive)")
 
     # --- pre-registered interpretation ------------------------------------
     print("\n" + "-" * W)
