@@ -103,6 +103,14 @@ def test_extractor_nan_enforcement():
     check("mdna_change NaN when no prior", np.isnan(out["mdna_change"]))
     check("present mdna feature kept", out["mdna_uncertainty"] == 0.5)
 
+    # model returns a non-numeric marker (e.g. Haiku's "<UNKNOWN>") -> NaN, no crash
+    fake_str = FakeClient({**{f: 0.4 for f in elf.FEATURE_COLS},
+                           "mdna_tone": "<UNKNOWN>", "rf_severity": "0.6"})
+    ext_str = elf.AnthropicExtractor(model="fake-model", client=fake_str)
+    out_s = ext_str.extract(mdna="m", rf="r", prior_mdna="pm", prior_rf="pr")
+    check("non-numeric feature -> NaN (no crash)", np.isnan(out_s["mdna_tone"]))
+    check("numeric string feature parsed", out_s["rf_severity"] == 0.6)
+
     # both sections absent -> no API call, all NaN
     calls_before = fake.calls
     out2 = ext.extract(mdna=None, rf=None, prior_mdna=None, prior_rf=None)

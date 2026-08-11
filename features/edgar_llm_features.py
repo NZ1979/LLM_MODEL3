@@ -134,10 +134,12 @@ class BaseExtractor:
         out = {}
         for k, (lo, hi) in FEATURE_RANGES.items():
             v = values.get(k, np.nan)
-            if v is None or (isinstance(v, float) and not np.isfinite(v)):
-                out[k] = np.nan
-            else:
-                out[k] = float(min(max(float(v), lo), hi))
+            try:
+                fv = float(v)          # numbers, and numeric strings like "0.5"
+            except (TypeError, ValueError):
+                out[k] = np.nan        # None, NaN, or a non-numeric marker like "<UNKNOWN>"
+                continue
+            out[k] = np.nan if not np.isfinite(fv) else float(min(max(fv, lo), hi))
         # change features require a prior; enforced by the caller passing None prior
         return out
 
