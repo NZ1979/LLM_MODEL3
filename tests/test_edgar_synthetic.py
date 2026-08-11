@@ -63,6 +63,12 @@ def test_ingest_helpers():
     check("10-K/A excluded", not ing.is_qualifying("10-K/A"))
     check("8-K excluded", not ing.is_qualifying("8-K"))
     check("10-K/A is a qualifying amendment", ing.is_qualifying_amendment("10-K/A"))
+    check("canon_cik handles str/int/float/leading-zeros",
+          ing.canon_cik("0000806085") == "806085" and ing.canon_cik(933136) == "933136"
+          and ing.canon_cik("933136.0") == "933136")
+    check("canon_cik null/nan -> '' (no-CIK names, not filled)",
+          ing.canon_cik(None) == "" and ing.canon_cik(float("nan")) == ""
+          and ing.canon_cik("nan") == "" and ing.canon_cik("") == "")
     check("acceptance date parses to ET date",
           ing.acceptance_date("2008-03-31T16:34:54.000Z") == _ts("2008-03-31"))
     check("acceptance date pre-2002 day precision",

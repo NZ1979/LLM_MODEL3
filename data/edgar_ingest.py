@@ -43,11 +43,18 @@ _MIN_INTERVAL = 1.0 / RATE_MAX_PER_SEC
 # ---------------------------------------------------------------------------
 def canon_cik(cik) -> str:
     """Canonical CIK: the integer as a string, no leading zeros (matches the
-    bridge's `cik` column). Accepts int, '0000806085', '806085'."""
-    s = str(cik).strip()
-    if not s:
+    bridge's `cik` column). Accepts int, float ('933136.0' from a null-bearing
+    column), '0000806085', '806085'. Null / missing (None, NaN, '', '<NA>') ->
+    '' (the bridge's 104 no-CIK names, counted not filled - Rule 18)."""
+    if cik is None:
         return ""
-    return str(int(s))
+    s = str(cik).strip()
+    if s.lower() in ("", "nan", "none", "null", "<na>"):
+        return ""
+    try:
+        return str(int(float(s)))
+    except (ValueError, TypeError):
+        return ""
 
 
 def is_amendment(form: str) -> bool:
