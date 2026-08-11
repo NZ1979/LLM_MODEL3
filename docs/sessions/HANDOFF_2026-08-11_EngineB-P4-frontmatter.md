@@ -1,0 +1,60 @@
+# LLM_Model3 - Session Handoff, 2026-08-11 (Engine B / P4 front matter: reading A, Spec 1, CIK bridge, EDGAR verified)
+
+Workstation Godzilla (Albuquerque, America/Denver). Working dir `C:\trading\LLM_MODEL3`. Paper/backtest only. Partition hard-rule held: no access to `C:\trading\LLM_SWING_MODEL\` or `C:\trading\LLM model`; no DB/script/code/git crossing. Follows `HANDOFF_2026-08-11_EngineB-P3.md` (P3 mechanical baseline complete + P4 kickoff).
+
+## Summary - what this session did
+
+Settled and banked the entire P4 **front matter** under strict pre-registration discipline. No modelling was run; nothing about the frozen P3 mechanical baseline or Spec 1 was tuned. All work is on `origin/main` (NZ1979/LLM_MODEL3), HEAD `0d49af9`.
+
+**1. Resolved the open kill-rule reading (operator decision, reading A).** `KILL_RULE.md` changelog updated (commit `776a60d`, thresholds unchanged): the ">=20% relative LLM lift" is a gate on *including the LLM feature layer*, not a precondition for shipping Engine B. Consequence: the P3 mechanical baseline (IC>0 + near-monotone decile Sharpe on both the 1998-2020 build and the once-touched 2021+ hold-out) **already clears Engine B's kill-rule ship condition on its own.** P4 is therefore **optional upside**, not do-or-die. (Kill rule only - real capital still needs P5: tradeable construction, cost/capacity, paper.)
+
+**2. Pre-registered P4 Spec 1, committed unrun** (`docs/ENGINE_B_P4_SPEC.md`, commit `203fb63`, no result under it). Everything LLM-independent is fixed:
+- OOS geometry: freeze the entire P4 pipeline via purged+embargoed walk-forward CV on 1998-2020; ONE pre-registered delta touch on 2021+ at the very end, only for a model that already clears the build-span bar.
+- CV: expanding walk-forward, annual step, 17 outer folds (test years 2004-2020); purge label-overlap months + embargo 21 market days; nested inner CV for hyperparameters (never on outer test or 2021+).
+- Comparison ladder: **M0** mechanical composite (frozen benchmark, build IC +0.0254; scores plug into `validation/engine_b_harness.py::evaluate` as `composite`) / **M1** LightGBM over the 5 factors, no LLM (diagnostic) / **M2** same LightGBM + LLM features. Same spec + folds for M1,M2 so the only difference is the feature set.
+- Model (operator choice): LightGBM; target = within-date percentile rank of `fwd_ret_21`; frozen hyperparameter grid; seed 20260811.
+- Kill-rule adjudication (operator choice): LOCKED bar (M2 beats M0 by >=20% relative + statistically distinguishable) PLUS a mandatory no-LLM honesty gate (M2 must also beat M1 significantly, else the gain is ML-fitting and the LLM is dropped) PLUS always-on IC>0 + monotone deciles. No threshold changed.
+- Delta test: paired per-date IC difference (M2-M0), Newey-West t + stationary block bootstrap (10k, mean block 6mo, seed 20260811); >=20% on the mean-IC ratio.
+- Training-harness leak audit (load-bearing now the model trains): purge/embargo synthetic planted-bleed + permuted-label training null (25 seeds) + reused cheat control.
+- LLM hindsight-leakage guard posture (operator choice): document-descriptive features only + masked hindsight-probe audit; too-good marginal IC assumed leaking. Concrete EDGAR data contract + feature list explicitly DEFERRED to Spec 2.
+
+**3. Built the survivorship-safe permaticker->CIK bridge** (commit `39162cb`). Sharadar `tickers` has no `cik` column but carries `secfilings` (per-permaticker EDGAR URL); CIK parsed from it via regex `(?i)cik=0*(\d+)`. Coverage 99.53% overall, **99.40% among delisted names**, 0 permaticker->multi-cik, 104 no-CIK (mostly preferreds, counted not filled). Artifact `data/raw/sharadar/permaticker_cik.parquet` (gitignored) via `scripts/build_cik_bridge.py`; probe `scripts/probe_sharadar_cik.py`. Leaves the frozen P3 panel untouched.
+
+**4. Verified EDGAR viable** (`scripts/probe_edgar_submissions.py`, commit `0d49af9`). The `data.sec.gov/submissions/CIK{cik:010d}.json` endpoint works with a fair-access User-Agent (contact read from `.env` key `SEC_EDGAR_CONTACT`, gitignored). `acceptanceDateTime` present = the knowable-at-time PIT stamp (pre-~2002 filings are day-precision midnight). `filings.recent` is capped ~1000; older filings live in the supplementary `filings.files[]` JSONs (must traverse both). Pre-2001 coverage confirmed (supplementary ranges reach 1994-1996). Historical annual-report variants: 10-K405, 10-KSB.
+
+**CRITICAL leakage trap found:** a CIK can continue across bankruptcy/merger and be renamed. WaMu CIK 933136 is now "Maverick Merger Sub 2 / Mr. Cooper (COOP)"; its filings run continuously WaMu(1995) -> Mr.Cooper(2025) under one CIK. Attributing all of a CIK's filings to WaMu's delisted permaticker would graft the successor's post-2008 filings onto the dead company = a CIK-level survivorship/temporal leak. **Fix (load-bearing for Spec 2):** attribute a CIK's filings to a permaticker ONLY within that permaticker's `[firstpricedate, lastpricedate]` window (the bridge carries these), and use a filing at rebalance T only when `acceptanceDate <= T`. Do NOT trust EDGAR `entityName` for identity.
+
+## State as of 2026-08-11 (verify against git log)
+
+HEAD `0d49af9`. This session's commits: `776a60d` (kill-rule reading A), `203fb63` (P4 Spec 1 unrun), `39162cb` (CIK bridge probe+builder), `0d49af9` (EDGAR submissions probe). Engine A CLOSED. Engine B: P3 mechanical baseline FROZEN + MEASURED CLEAN and now (reading A) clearing its kill rule; P4 front matter DONE. Next is Spec 2.
+
+## Ready-to-paste kickoff prompt for the next session (P4 Spec 2)
+
+---
+
+Continue LLM_Model3 at `C:\trading\LLM_MODEL3` on Godzilla (America/Denver). Verify anchors first: run `date && TZ=America/Denver date`, confirm the working dir is `C:\trading\LLM_MODEL3` (NOT `LLM_SWING_MODEL`, NOT `LLM model`), confirm the workstation is Godzilla. Re-read `CLAUDE.md`, `CLAUDE_PREFLIGHT.md` (33 rules), `PROJECT_CHARTER.md`, `KILL_RULE.md`, `docs/ENGINE_B_P4_SPEC.md` (Spec 1), `docs/ENGINE_B_BASELINE_SPEC.md`, and `docs/ENGINE_B_BASELINE_RESULTS.md` before any operational step. Partition hard-rule holds. Data pulls run on Godzilla `.venv` (the sandbox is firewalled from external APIs); git runs from PowerShell on Godzilla (agents do not git from the sandbox, Rule 24/27).
+
+STATE (verify against git log, don't trust this framing): HEAD should be `0d49af9`. Engine A CLOSED. Engine B P3 mechanical baseline FROZEN/MEASURED (harness `8a8eac8`, results `bb3b8e9`). Kill-rule reading A locked (`776a60d`): mechanical baseline can ship Engine B alone; the >=20% LLM lift gates only whether the LLM layer is INCLUDED. P4 is OPTIONAL upside. P4 Spec 1 committed unrun (`203fb63`) fixing OOS geometry, purged+embargoed walk-forward CV (17 outer folds 2004-2020, nested inner hyperparameter selection), the M0/M1/M2 comparison ladder, LightGBM (target = within-date percentile rank of `fwd_ret_21`, frozen grid, seed 20260811), the delta test (paired per-date IC diff M2-M0, NW t + block bootstrap, >=20% on the mean-IC ratio), the kill-rule adjudication (locked bar + mandatory no-LLM honesty gate + always-on IC>0/monotone deciles), the training-harness leak audit, and the LLM leakage-guard posture (document-descriptive features + masked hindsight-probe). CIK bridge DONE (`39162cb`): `data/raw/sharadar/permaticker_cik.parquet` (gitignored), permaticker->CIK 99.4% delisted coverage, 1:1. EDGAR verified (`0d49af9`): submissions API works with `SEC_EDGAR_CONTACT` in `.env`; `acceptanceDateTime` is the PIT stamp; traverse `filings.recent` + `filings.files[]`; pre-2001 coverage confirmed.
+
+DO NOT re-tune, re-run, or re-adjudicate the frozen mechanical baseline OR Spec 1 to chase a number. Any change to either needs a fresh, dated pre-registration stating why the original choice was wrong on grounds independent of its result.
+
+P4 SPEC 2 OBJECTIVE: design the EDGAR filings ingestion and the LLM feature layer, then pre-register it UNRUN as `docs/ENGINE_B_P4_SPEC2.md` (committed with no result), against the real EDGAR schema (reading the schema is metadata, not a result). Scope is already chosen by the operator: **10-K + 10-Q, extract MD&A + Risk Factors sections only, for a name ONLY while it is in the eligible universe.** The LLM is a feature extractor whose marginal IC is measured, NEVER the predictor (charter 1).
+
+Settle and pre-register, in order:
+1. **INGESTION CONTRACT.** Exact form set (10-K, historical 10-K405/10-KSB, 10-Q; decide amendment `/A` handling). The fetch path: submissions JSON -> traverse `recent` + all `filings.files[]` -> fetch `primaryDocument` from `https://www.sec.gov/Archives/edgar/data/{cik}/{accession-nodashes}/{primaryDocument}`; SEC fair-access <=10 req/sec with the `.env` UA. Storage format for extracted sections. The section-extraction method must handle BOTH modern HTML/inline-XBRL filings and old plain-`.txt` filings.
+2. **THE LEAK-CRITICAL ATTRIBUTION RULE (load-bearing).** Attribute a CIK's filings to a permaticker ONLY within that permaticker's `[firstpricedate, lastpricedate]` window, and use a filing at rebalance T only when `acceptanceDate <= T`. This prevents CIK-continuation leakage (WaMu CIK 933136 -> Mr. Cooper/COOP under one CIK). Do NOT trust EDGAR `entityName`. Build a fail-loud attribution-ambiguity check analogous to the panel's, and a coverage funnel over the 1998-2020 build universe (Rule 18: show denominators; names/filings dropped and why).
+3. **FEATURE JOIN.** How the LLM features become per-`(date, permaticker)` columns: for each rebalance T, the as-of latest qualifying filing with `acceptanceDate <= T` inside the permaticker's window; features carried forward until the next filing; names with no qualifying filing get NaN LLM features and are counted (they fall back to M1's mechanical-only behaviour, not filled). Features must slot into the M1/M2 LightGBM feature matrix from Spec 1.
+4. **THE CONCRETE LLM FEATURE LIST + EXTRACTION (the crux).** Document-descriptive features only (tone, uncertainty/litigation language, readability/complexity, topic presence, change-vs-prior-filing). The extraction model (record its identity + training cutoff) and the exact prompt, which FORBIDS predicting returns or invoking any knowledge of the company's future - it scores only the document's own content. Normalisation (within-date z-score, consistent with the mechanical factors; fit on training rows only).
+5. **THE LLM HINDSIGHT-LEAKAGE AUDIT (concrete thresholds).** Instantiate the Spec 1 posture: the masked hindsight-probe (extract each feature with vs without issuer identity/dates; reject any feature whose masked-vs-unmasked shift correlates with the forward return), and the marginal-IC ceiling above which a feature is assumed leaking until the probe clears. Fix the sample size and thresholds a priori.
+
+DISCIPLINE (same as P3/P4 front matter): pre-register the spec and commit it UNRUN, verify with git log; synthetic-test the ingestion + attribution + feature-join path before any real extraction (a planted successor-entity filing must be rejected by the window rule; a filing dated after T must not be used at T); run all pulls on Godzilla `.venv`; git from PowerShell on Godzilla; fail loud, show denominators; no premature victory (`py_compile`/tests passing is not a result); the 2021+ hold-out stays untouched until a model has cleared the build-span bar; a too-good marginal IC is assumed leaking until the audit clears it.
+
+---
+
+## Commits this session (all pushed, origin/main)
+- `776a60d` - KILL_RULE: Engine B closing-clause reading A (mechanical baseline can ship alone); thresholds unchanged
+- `203fb63` - P4 Spec 1 pre-registration (OOS geometry, CV, M0/M1/M2 ladder, LightGBM, delta test, leakage-guard posture), unrun
+- `39162cb` - permaticker->CIK bridge (probe + integrity-gated builder)
+- `0d49af9` - EDGAR submissions-API probe (PIT stamp + coverage verified; CIK-continuation constraint surfaced)
+
+State: Engine A CLOSED. Engine B P3 baseline FROZEN + clears its kill rule (reading A). P4 front matter COMPLETE. Next is P4 Spec 2 (EDGAR ingestion + LLM feature layer, pre-registered unrun).
