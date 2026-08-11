@@ -359,6 +359,21 @@ prompt **never** contains the ticker, the name, the date, or any price/return
 data. A single fixed rubric string per feature is stored with the spec's
 implementation and versioned into the cache key.
 
+### 4.5 Section-length truncation (addendum, 2026-08-11, fixed before any extraction)
+
+The real-filing smoke test (Lehman/Bear/WaMu/Kraft) showed extracted sections
+range from ~350 chars (incorporation-by-reference filings, legitimately tiny) to
+~214k chars (Lehman's 2008 MD&A) - the largest being ~50k tokens, over a single
+clean LLM call. Truncation rule, fixed a priori (operator decision, 2026-08-11):
+**head 12,000 chars + tail 4,000 chars.** A section with `len <= 16,000` is sent
+whole; a longer one is sent as `text[:12000] + <truncation marker> + text[-4000:]`.
+This keeps the opening narrative (where overall tone, overview and the leading
+risks sit) and the closing (liquidity/outlook, final risk items), drops the dense
+tabular middle, and bounds tokens/cost deterministically. The `truncated` flag and
+the original `char_len` are recorded per section (Rule 18). This rule is frozen
+here before any extraction; changing it later to move a result requires a fresh
+dated pre-registration.
+
 ---
 
 ## 5. The LLM hindsight-leakage audit (concrete thresholds, fixed a priori)
@@ -534,3 +549,7 @@ EDGAR corpus, the attribution, the LLM feature columns, and their audit.
   ceiling 0.10, LM-lexicon agreement floor 0.40). The synthetic + smoke tests
   gating any real extraction. Anticipated outcome and failure handling. **No result
   exists under this spec at commit time.**
+- 2026-08-11 (addendum) - Section-length truncation rule fixed a priori (sec 4.5):
+  head 12,000 + tail 4,000 chars, whole if <=16,000. Motivated by the real-filing
+  smoke test showing sections up to ~214k chars (>50k tokens). Fixed before any
+  extraction; still no result exists under this spec.

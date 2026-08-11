@@ -26,3 +26,8 @@ ruff
 # Research
 jupyterlab
 matplotlib
+
+# EDGAR text ingestion + LLM feature extraction (Engine B P4, Spec 2)
+beautifulsoup4     # EDGAR HTML/inline-XBRL -> text
+lxml               # bs4 parser backend
+anthropic          # LLM-as-feature extractor (charter: never the predictor)

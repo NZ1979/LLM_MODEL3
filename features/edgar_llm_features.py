@@ -14,12 +14,28 @@ knowledge.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import re
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
 from models.engine_b_factors import _winsorize_z
+
+# Spec 2 sec 4.5 (addendum) - section-length truncation, fixed a priori. Sections
+# run 350 chars .. ~214k chars (smoke test); the largest is ~50k tokens.
+HEAD_CHARS = 12000
+TAIL_CHARS = 4000
+TRUNC_MARK = "\n\n...[SECTION TRUNCATED - MIDDLE OMITTED]...\n\n"
+
+# which features come from which section (used to enforce NaN when a section or a
+# prior filing is absent - Spec 2 sec 3/4.1)
+MDNA_FEATS = ("mdna_tone", "mdna_forward_tone", "mdna_uncertainty",
+              "mdna_complexity", "mdna_liquidity_stress", "mdna_change")
+RF_FEATS = ("rf_severity", "rf_specificity", "rf_litigation", "rf_change")
+CHANGE_FEATS = {"mdna_change": "prior_mdna", "rf_change": "prior_rf"}
 
 # Spec 2 sec 4.1 - the ten features (name, low, high). All document-descriptive.
 FEATURE_RANGES = {
@@ -146,6 +162,148 @@ class StubExtractor(BaseExtractor):
             "rf_change": change(risk_factors, prior_risk_factors),
         }
         return self._clip(vals)
+
+
+# ---------------------------------------------------------------------------
+# Truncation + prompt assembly + the real Anthropic extractor (Godzilla only)
+# ---------------------------------------------------------------------------
+def truncate_section(text):
+    """Head 12k + tail 4k chars (Spec 2 sec 4.5). Returns (text_or_None, truncated)."""
+    if text is None:
+        return None, False
+    if len(text) <= HEAD_CHARS + TAIL_CHARS:
+        return text, False
+    return text[:HEAD_CHARS] + TRUNC_MARK + text[-TAIL_CHARS:], True
+
+
+def prepare_for_extraction(section, name=None, ticker=None, cik=None, mask=True):
+    """Mask identity (production default) then truncate. Returns (text, truncated)."""
+    if section is None:
+        return None, False
+    t = mask_identity(section, name=name, ticker=ticker, cik=cik) if mask else section
+    return truncate_section(t)
+
+
+# Per-feature rubric shown to the model via the tool schema. Purely descriptive;
+# no field may reference price, return, or any post-filing outcome (Spec 2 sec 4).
+RUBRICS = {
+    "mdna_tone": "Overall tone of the results and business conditions as described in the MD&A: -1 very negative, 0 neutral, +1 very positive. Describe the language, not investment merit.",
+    "mdna_forward_tone": "Tone of the forward-looking statements as written (expectations, plans, outlook): -1 to +1. Not a return forecast.",
+    "mdna_uncertainty": "Density of hedging / uncertainty / 'cannot predict' / 'depends on' language in the MD&A: 0 none, 1 pervasive.",
+    "mdna_complexity": "Readability/obfuscation of the MD&A: 0 plain and clear, 1 dense, jargon-heavy, convoluted.",
+    "mdna_liquidity_stress": "Prominence of liquidity, going-concern, covenant or financing-stress language in the MD&A: 0 none, 1 dominant.",
+    "mdna_change": "Magnitude of change of this MD&A versus the prior filing's MD&A provided: 0 essentially identical, 1 substantially rewritten. Score only if a prior MD&A is provided.",
+    "rf_severity": "Overall gravity/severity of the risks as described in the Risk Factors: 0 mild, 1 grave.",
+    "rf_specificity": "How company-specific vs boilerplate the Risk Factors read: 0 generic boilerplate, 1 highly specific.",
+    "rf_litigation": "Prominence of litigation / regulatory / legal-exposure language in the Risk Factors: 0 none, 1 dominant.",
+    "rf_change": "Magnitude of change of these Risk Factors versus the prior filing's Risk Factors provided: 0 identical, 1 substantially changed. Score only if prior Risk Factors are provided.",
+}
+
+SCORE_TOOL = {
+    "name": "score_filing",
+    "description": ("Return document-descriptive scores for the filing text. Score ONLY "
+                    "what the text says. Do not identify the company or date. Do not "
+                    "predict returns or any outcome after the filing. Omit any field "
+                    "whose source section was not provided."),
+    "input_schema": {
+        "type": "object",
+        "properties": {f: {"type": "number", "description": RUBRICS[f]} for f in FEATURE_COLS},
+        "required": [],
+        "additionalProperties": False,
+    },
+}
+
+
+def build_user_prompt(mdna, rf, prior_mdna, prior_rf) -> str:
+    """Assemble the user message from masked+truncated section texts. Contains NO
+    ticker/name/date/price - the inputs are pre-masked (Spec 2 sec 4.3/4.4)."""
+    p = ["Score the filing text below by calling score_filing. Score only sections "
+         "that are present; omit fields for any section marked NOT PRESENT.", ""]
+    p += (["=== MD&A (current) ===", mdna, ""] if mdna
+          else ["=== MD&A: NOT PRESENT (omit mdna_tone/forward_tone/uncertainty/complexity/liquidity_stress) ===", ""])
+    p += (["=== RISK FACTORS (current) ===", rf, ""] if rf
+          else ["=== RISK FACTORS: NOT PRESENT (omit rf_severity/specificity/litigation) ===", ""])
+    p += (["=== MD&A (prior filing, for mdna_change) ===", prior_mdna, ""] if prior_mdna
+          else ["=== No prior MD&A (omit mdna_change) ===", ""])
+    p += (["=== RISK FACTORS (prior filing, for rf_change) ===", prior_rf, ""] if prior_rf
+          else ["=== No prior Risk Factors (omit rf_change) ===", ""])
+    return "\n".join(p)
+
+
+def _tool_input(resp) -> dict:
+    """Pull the score_filing tool_use input from an Anthropic Messages response."""
+    for block in (getattr(resp, "content", None) or []):
+        if getattr(block, "type", None) == "tool_use" and getattr(block, "name", "") == SCORE_TOOL["name"]:
+            return dict(getattr(block, "input", None) or {})
+    return {}
+
+
+class AnthropicExtractor(BaseExtractor):
+    """Real LLM feature extractor (Godzilla .venv; needs `anthropic` + ANTHROPIC_API_KEY).
+
+    Receives sections ALREADY masked + truncated by the runner. temperature=0,
+    forced structured tool output, content-hash disk cache so re-runs are free and
+    the feature corpus is frozen (Spec 2 sec 4.2). The model id + cutoff are the
+    caller's responsibility to record in run metadata (Spec 2 sec 4.2 / charter).
+    """
+    def __init__(self, model: str, cache_dir=None, max_tokens: int = 1024, client=None):
+        if not model:
+            raise ValueError("AnthropicExtractor: model id required and recorded (Spec 2 sec 4.2). "
+                             "Set it explicitly / via env; do not default silently.")
+        self.model = model
+        self.cache_dir = Path(cache_dir) if cache_dir else None
+        self.max_tokens = max_tokens
+        self._client = client
+        self.calls = 0
+        self.cache_hits = 0
+
+    def _client_or_make(self):
+        if self._client is None:
+            import anthropic  # lazy - Godzilla only
+            self._client = anthropic.Anthropic()   # reads ANTHROPIC_API_KEY from env
+        return self._client
+
+    def _cache_key(self, mdna, rf, prior_mdna, prior_rf) -> str:
+        payload = json.dumps([self.model, PROMPT_VERSION, mdna, rf, prior_mdna, prior_rf],
+                             ensure_ascii=False)
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    def extract(self, mdna, rf, prior_mdna, prior_rf) -> dict:
+        if not mdna and not rf:
+            return {f: np.nan for f in FEATURE_COLS}     # nothing to score, no API call
+        if self.cache_dir is not None:
+            cp = self.cache_dir / f"{self._cache_key(mdna, rf, prior_mdna, prior_rf)}.json"
+            if cp.exists():
+                self.cache_hits += 1
+                return self._finalize(json.loads(cp.read_text()), mdna, rf, prior_mdna, prior_rf)
+        resp = self._client_or_make().messages.create(
+            model=self.model, max_tokens=self.max_tokens, temperature=0,
+            system=SYSTEM_PROMPT, tools=[SCORE_TOOL],
+            tool_choice={"type": "tool", "name": SCORE_TOOL["name"]},
+            messages=[{"role": "user",
+                       "content": build_user_prompt(mdna, rf, prior_mdna, prior_rf)}])
+        raw = _tool_input(resp)
+        self.calls += 1
+        if self.cache_dir is not None:
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+            (self.cache_dir / f"{self._cache_key(mdna, rf, prior_mdna, prior_rf)}.json").write_text(json.dumps(raw))
+        return self._finalize(raw, mdna, rf, prior_mdna, prior_rf)
+
+    def _finalize(self, raw, mdna, rf, prior_mdna, prior_rf) -> dict:
+        vals = self._clip(raw if isinstance(raw, dict) else {})
+        # enforce NaN where the source section / prior is absent - never let a score
+        # stand for text the model did not see (Spec 2 sec 3/4.1)
+        if not mdna:
+            for f in MDNA_FEATS:
+                vals[f] = np.nan
+        if not rf:
+            for f in RF_FEATS:
+                vals[f] = np.nan
+        if not prior_mdna:
+            vals["mdna_change"] = np.nan
+        if not prior_rf:
+            vals["rf_change"] = np.nan
+        return vals
 
 
 # ---------------------------------------------------------------------------
