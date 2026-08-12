@@ -121,3 +121,25 @@ settled one.
 Next build step is **P3**: the survivorship-bias-free equity panel (evaluate
 Norgate) and a mechanical cross-sectional baseline, **before** any ML or LLM
 layer, per section 5 and the Engine B bar in `KILL_RULE.md`.
+
+### 2026-08-12 - Engine B microcap experiment closed (informative negative)
+
+The pre-registered microcap-tail experiment (`docs/ENGINE_B_MICROCAP_SPEC.md`,
+frozen `9c52f8b`) was run on both spans and **closed as an informative negative.**
+
+- The microcap tail carries a larger *gross* cross-sectional signal than the
+  liquid band (build IC +0.056 vs +0.025; hold-out +0.109 vs +0.050,
+  out-of-sample, leak-free), confirming the literature (charter section 4).
+- **But net of realistic microcap cost it is not capturable.** The buffered
+  long-only book's net tradeable Sharpe is *below* the liquid baseline on BOTH
+  spans at 1x and 2x cost (build -0.11 / -0.18; hold-out -0.54 / -0.62), failing
+  the a-priori >= +0.20 decision rule. The larger gross edge is consumed by ~2.3x
+  the turnover, 5x the spread, square-root impact, and the microcap universe's own
+  deep drawdowns. See `docs/ENGINE_B_MICROCAP_RESULTS.md`.
+- **Decision: the charter's microcap exclusion (section 3) stands; Engine B
+  remains on the liquid $300M-$15B small/mid universe.** The 2021+ microcap
+  hold-out is spent (touched once). The frozen liquid baseline (`bb3b8e9`) is
+  unchanged - the new machinery reproduced it byte-for-byte on both spans, which
+  is what makes the microcap numbers trustworthy. Any future microcap work needs a
+  fresh, dated pre-registration justifying a new question on grounds independent
+  of this result.
