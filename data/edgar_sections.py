@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import html
 import re
+import warnings
 
 MIN_SECTION_CHARS = 200   # a located span shorter than this is a TOC artefact -> None
 
@@ -26,6 +27,14 @@ _SMART = {0x2019: "'", 0x2018: "'", 0x201C: '"', 0x201D: '"',
 try:
     from bs4 import BeautifulSoup
     _HAVE_BS4 = True
+    # Modern EDGAR filings are inline-XBRL (XML served as HTML). The HTML parser
+    # extracts their text fine, but bs4 emits a noisy XMLParsedAsHTMLWarning per
+    # document; silence it (cosmetic - parsing is unaffected).
+    try:
+        from bs4 import XMLParsedAsHTMLWarning
+        warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
+    except Exception:   # older bs4 without the warning class
+        pass
 except Exception:   # pragma: no cover - lxml/bs4 present on Godzilla .venv
     _HAVE_BS4 = False
 
