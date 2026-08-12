@@ -236,3 +236,55 @@ they get tested, and the paper→real-money gate must account for them.
   and failure handling — all fixed before any microcap IC or net return was computed.
   Frozen liquid baseline untouched; factors unchanged. No result exists under this
   spec at commit time.
+
+- 2026-08-12 — **Pre-run addenda, fixed BEFORE any result exists under this spec**
+  (the implementation session; no microcap IC or net return has been computed).
+  Two knowable-at-time refinements (build-kickoff handoff §3a) plus implementation
+  clarifications analogous to the baseline's implicit-point clarifications:
+
+  1. **AUM grid adds $0.1M** → reported capacity grid is **$0.1M / $0.5M / $2M /
+     $5M**. The operator's actual sleeve is ~$100k, where impact is lowest and most
+     of the edge is captured. A *reported* point, not a tuning knob.
+  2. **In-backtest benchmark fixed:** the passive comparison is the **equal-weight
+     microcap eligible universe** ("just hold all of them", gross) **plus SPY**
+     (Tiingo `adj_close`, the Engine A ETF source). The *live-decision* benchmark (a
+     real small-cap-value / momentum or managed-futures ETF, e.g. VBR/IJS/MTUM) is
+     chosen a priori at paper time, recorded then.
+
+  Implementation clarifications (fixed a priori; each is the conservative reading):
+  - (a) **Per-name trade participation** uses `max(w_old, w_new) * AUM /
+    dollarvol_60` — the larger of the pre-/post-rebalance position — so both new
+    entries and full exits carry impact (a literal position_notional would zero an
+    exit's impact). Never understates.
+  - (b) **Weight caps** applied by iterative water-filling to respect
+    `min(size_cap_i, 3%)` with `size_cap_i = 10 * dollarvol_60_i / AUM`; if the caps
+    cannot absorb the whole book (high-AUM regime) the residual is held as **cash
+    (0 return)** and the **invested fraction is reported**. This is how capacity
+    binds; it is made visible, not hidden.
+  - (c) **Monthly-return mechanics:** target weights are bought at each quarterly
+    rebalance and **held** through the quarter (no intra-quarter trades → no
+    intra-quarter cost). Each month the book earns `sum_i w_i * r_i` where `r_i` is
+    the held name's `fwd_ret_21` (delisting folded via `fwd_status`); a held name
+    absent or without a valid label that month contributes **0** to its weight
+    (counted, never fabricated). Realised-turnover cost is charged **only at
+    rebalance months**, aligned to the same month whose forward return the freshly
+    traded book then earns.
+  - (d) **Fixed construction constants:** `TARGET_N = 75` (mid-range of the spec's
+    50–100), buy at D10, hold until decile < 8, quarterly (`rebalance_every = 3`),
+    ADV size cap `10 × dollarvol_60 / AUM`, per-name cap 3%.
+  - (e) **Like-for-like liquid anchor:** the frozen liquid small/mid band
+    ($300M–$15B) is ALSO run through the identical buffered construction + realistic
+    cost model, to give the decision rule a tradeable-Sharpe comparison under the
+    same machinery (the frozen naive-D10 Sharpe 0.54 is cited for reference only,
+    not as the comparison anchor). The frozen baseline result (`bb3b8e9`) is not
+    modified; a separate parameterised screen (`models/engine_b_universe_micro.py`)
+    leaves the frozen `screen()` byte-for-byte untouched and reproduces its
+    eligibility exactly (asserted in `tests/test_engine_b_microcap_synthetic.py`).
+  - (f) **Half-spread tier** is assigned per name by marketcap: nano <$50M, micro
+    <$300M, else liquid.
+
+  New modules: `models/engine_b_universe_micro.py`, `validation/costs_microcap.py`,
+  `models/engine_b_portfolio.py`, `scripts/run_engine_b_microcap.py`,
+  `tests/test_engine_b_microcap_synthetic.py`. Frozen liquid baseline, Spec 1, Spec
+  2, factors, and the panel timing layer untouched. **No result exists under this
+  spec at this commit.**
